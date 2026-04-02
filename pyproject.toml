@@ -1,0 +1,18 @@
+[project]
+name = "bsiri"
+version = "0.1.0"
+description = "Discover and execute macOS App Intents via WorkflowKit/ActionKit private frameworks"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "openai>=2.30.0",
+    "toml>=0.10.2",
+]
+
+[project.scripts]
+bsiri = "bsiri.cli:main"
+sosumi = "bsiri.sosumi:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

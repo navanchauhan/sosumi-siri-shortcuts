@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+dist/
+build/
+.tc/
+*.shortcut
+!examples/*.shortcut
+cli/bsiri
+cli/bsiri_injector.dylib
+cli/bsiri_injector_arm64e.dylib
+cli/build/
+.ap
+.python-version
+.env

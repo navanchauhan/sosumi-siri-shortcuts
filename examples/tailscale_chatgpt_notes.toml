@@ -1,0 +1,54 @@
+name = "Tailscale → ChatGPT → Notes"
+
+# Get Tailscale status, ask ChatGPT to summarize it, save to Notes.
+
+# Step 1: Get Tailscale status entity + extract properties
+[[action]]
+type = "app_intent"
+bundle_identifier = "io.tailscale.ipn.macsys"
+app_intent_identifier = "GetStatusIntent"
+name = "Tailscale"
+uuid = "TS-STATUS-0000-0000-000000000001"
+
+[[action]]
+type = "text"
+text = "Connected: <<TS-STATUS-0000-0000-000000000001:Status.connected>>, Account: <<TS-STATUS-0000-0000-000000000001:Status.profileName>>, Exit Node: <<TS-STATUS-0000-0000-000000000001:Status.exitNodeName>>"
+
+[[action]]
+type = "set_variable"
+name = "ts_info"
+
+# Step 2: Ask ChatGPT to summarize
+[[action]]
+type = "app_intent"
+bundle_identifier = "com.openai.chat"
+app_intent_identifier = "AskIntent"
+name = "ChatGPT"
+
+[action.parameters]
+prompt = "Give me a one-sentence summary of this Tailscale VPN status (be concise, no preamble): {{ts_info}}"
+newChat = true
+continuous = false
+
+[[action]]
+type = "set_variable"
+name = "summary"
+
+# Step 3: Create note with both raw status and ChatGPT summary
+[[action]]
+type = "text"
+text = "ChatGPT Summary: {{summary}}\n\nRaw Status: {{ts_info}}"
+
+[[action]]
+type = "set_variable"
+name = "note_body"
+
+[[action]]
+type = "app_intent"
+bundle_identifier = "com.apple.Notes"
+app_intent_identifier = "CreateNoteLinkAction"
+name = "Notes"
+
+[action.parameters]
+name = "Tailscale Status (via ChatGPT)"
+contents = "{{note_body}}"

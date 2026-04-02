@@ -1,0 +1,11 @@
+name = "Simple Note Test"
+
+[[action]]
+type = "app_intent"
+bundle_identifier = "com.apple.Notes"
+app_intent_identifier = "CreateNoteLinkAction"
+name = "Notes"
+
+[action.parameters]
+name = "bsiri test note"
+contents = "hello from bsiri"

@@ -1,0 +1,21 @@
+# Example: Open a new Ghostty terminal and run a command
+
+name = "Ghostty Demo"
+
+[[action]]
+type = "app_intent"
+bundle_identifier = "com.mitchellh.ghostty"
+app_intent_identifier = "NewTerminalIntent"
+name = "Ghostty"
+
+[action.parameters]
+command = "echo 'Hello from bsiri!'"
+
+[[action]]
+type = "app_intent"
+bundle_identifier = "com.mitchellh.ghostty"
+app_intent_identifier = "InputTextIntent"
+name = "Ghostty"
+
+[action.parameters]
+text = "ls -la\n"

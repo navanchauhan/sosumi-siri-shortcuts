@@ -1,0 +1,26 @@
+name = "Auto Team ID Test"
+
+# No team_identifier — builder auto-discovers it.
+# Uses text action with property aggrandizements to extract entity fields.
+
+[[action]]
+type = "app_intent"
+bundle_identifier = "io.tailscale.ipn.macsys"
+app_intent_identifier = "GetStatusIntent"
+name = "Tailscale"
+uuid = "11111111-1111-1111-1111-111111111111"
+
+[[action]]
+type = "text"
+text = "Connected: <<11111111-1111-1111-1111-111111111111:Status.connected>>\nAccount: <<11111111-1111-1111-1111-111111111111:Status.profileName>>"
+uuid = "22222222-2222-2222-2222-222222222222"
+
+[[action]]
+type = "app_intent"
+bundle_identifier = "com.apple.Notes"
+app_intent_identifier = "CreateNoteLinkAction"
+name = "Notes"
+
+[action.parameters]
+name = "Auto Team Test"
+contents = "<<22222222-2222-2222-2222-222222222222:Text>>"

@@ -1,0 +1,45 @@
+name = "Built-in Actions Test"
+
+# Test various built-in actions through the injector
+
+# Get battery level
+[[action]]
+type = "get_battery_level"
+
+[[action]]
+type = "detect_text"
+
+[[action]]
+type = "set_variable"
+name = "battery"
+
+# Get current date
+[[action]]
+type = "date"
+mode = "Current Date"
+
+[[action]]
+type = "detect_text"
+
+[[action]]
+type = "set_variable"
+name = "now"
+
+# Compose everything and create note
+[[action]]
+type = "text"
+text = "Battery: {{battery}}%\nDate: {{now}}"
+
+[[action]]
+type = "set_variable"
+name = "info"
+
+[[action]]
+type = "app_intent"
+bundle_identifier = "com.apple.Notes"
+app_intent_identifier = "CreateNoteLinkAction"
+name = "Notes"
+
+[action.parameters]
+name = "Built-in Actions Test"
+contents = "{{info}}"

@@ -1,0 +1,25 @@
+name = "Tailscale Status to Note"
+
+# Get Tailscale status and create a note with it.
+# team_identifier is required for entity-returning intents to avoid hanging.
+
+[[action]]
+type = "app_intent"
+bundle_identifier = "io.tailscale.ipn.macsys"
+app_intent_identifier = "GetStatusIntent"
+name = "Tailscale"
+team_identifier = "W5364U7YZB"
+
+[[action]]
+type = "set_variable"
+name = "ts_status"
+
+[[action]]
+type = "app_intent"
+bundle_identifier = "com.apple.Notes"
+app_intent_identifier = "CreateNoteLinkAction"
+name = "Notes"
+
+[action.parameters]
+name = "Tailscale Status"
+contents = "{{ts_status}}"
