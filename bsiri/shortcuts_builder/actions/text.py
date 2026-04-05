@@ -1,4 +1,4 @@
-from .base import BaseAction, ChoiceField, Field, VariablesField
+from .base import BaseAction, BooleanField, ChoiceField, Field, VariablesField
 
 
 class CommentAction(BaseAction):
@@ -124,3 +124,57 @@ class ShowDefinitionAction(BaseAction):
 
     itype = 'is.workflow.actions.showdefinition'
     keyword = 'show_definition'
+
+
+class CombineTextAction(BaseAction):
+    '''Combine a list of text into one'''
+
+    itype = 'is.workflow.actions.text.combine'
+    keyword = 'combine_text'
+
+    separator = Field('WFTextSeparator', required=False)
+    custom_separator = Field('WFTextCustomSeparator', required=False)
+    uuid = Field('UUID', required=False)
+
+
+class MatchTextAction(BaseAction):
+    '''Match text with a regular expression'''
+
+    itype = 'is.workflow.actions.text.match'
+    keyword = 'match_text'
+
+    pattern = Field('WFMatchTextPattern')
+    case_sensitive = BooleanField('WFMatchTextCaseSensitive', required=False)
+    uuid = Field('UUID', required=False)
+
+
+class GetMatchGroupAction(BaseAction):
+    '''Get a group from matched text'''
+
+    itype = 'is.workflow.actions.text.match.getgroup'
+    keyword = 'get_match_group'
+
+    index = Field('WFGetGroupType', required=False)
+    uuid = Field('UUID', required=False)
+
+
+class ReplaceTextAction(BaseAction):
+    '''Replace text using find/replace'''
+
+    itype = 'is.workflow.actions.text.replace'
+    keyword = 'replace_text'
+
+    find = Field('WFReplaceTextFind')
+    replace_with = Field('WFReplaceTextReplace', required=False)
+    case_sensitive = BooleanField('WFReplaceTextCaseSensitive', required=False)
+    regex = BooleanField('WFReplaceTextRegularExpression', required=False)
+    uuid = Field('UUID', required=False)
+
+
+class CorrectSpellingAction(BaseAction):
+    '''Correct spelling of text'''
+
+    itype = 'is.workflow.actions.correctspelling'
+    keyword = 'correct_spelling'
+
+    uuid = Field('UUID', required=False)

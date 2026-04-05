@@ -1,4 +1,4 @@
-from .base import BaseAction, BooleanField, ChoiceField, FloatField
+from .base import BaseAction, BooleanField, ChoiceField, Field, FloatField
 
 
 class GetBatteryLevelAction(BaseAction):
@@ -121,3 +121,72 @@ class SetWiFiAction(BaseAction):
     keyword = 'set_wifi'
 
     on = BooleanField('OnValue')
+
+
+class SetAppearanceAction(BaseAction):
+    '''Set light/dark mode'''
+
+    itype = 'is.workflow.actions.appearance'
+    keyword = 'set_appearance'
+
+    style = Field('WFAppearance', required=False)  # Light, Dark, Toggle
+
+
+class SetNightShiftAction(BaseAction):
+    '''Toggle Night Shift'''
+
+    itype = 'is.workflow.actions.nightshift'
+    keyword = 'set_night_shift'
+
+    enabled = BooleanField('WFNightShiftEnabled', required=False)
+
+
+class SetStageManagerAction(BaseAction):
+    '''Toggle Stage Manager'''
+
+    itype = 'is.workflow.actions.stagemanager'
+    keyword = 'set_stage_manager'
+
+    enabled = BooleanField('WFStageManagerEnabled', required=False)
+
+
+class LockScreenAction(BaseAction):
+    '''Lock the screen'''
+
+    itype = 'is.workflow.actions.lockscreen'
+    keyword = 'lock_screen'
+
+
+class LogOutAction(BaseAction):
+    '''Log out the current user'''
+
+    itype = 'is.workflow.actions.logout'
+    keyword = 'log_out'
+
+
+class SleepAction(BaseAction):
+    '''Put the computer to sleep'''
+
+    itype = 'is.workflow.actions.sleep'
+    keyword = 'sleep_computer'
+
+
+class RestartAction(BaseAction):
+    '''Restart the computer'''
+
+    itype = 'is.workflow.actions.restart'
+    keyword = 'restart'
+
+
+class ShutDownAction(BaseAction):
+    '''Shut down the computer'''
+
+    itype = 'is.workflow.actions.shutdown'
+    keyword = 'shut_down'
+
+
+class SetSoundOutputAction(BaseAction):
+    '''Set the sound output device'''
+
+    itype = 'is.workflow.actions.setsoundoutput'
+    keyword = 'set_sound_output'

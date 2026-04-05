@@ -4,6 +4,20 @@ from .appintent import AppIntentAction, NotesCreateNoteAction, TailscaleGetStatu
 from .b64 import Base64DecodeAction, Base64EncodeAction
 from .base import BaseAction, RawAction
 from .calculation import CountAction
+from .calendar import (
+    CreateEventAction,
+    CreateReminderAction,
+    FindEventsAction,
+    FindRemindersAction,
+    GetUpcomingEventsAction,
+)
+from .contacts import (
+    EmailAddressAction,
+    FindContactsAction,
+    GetContactsAction,
+    PhoneNumberAction,
+    SelectContactAction,
+)
 from .conditions import ElseAction, EndIfAction, IfAction
 from .date import (
     DateAction,
@@ -15,15 +29,35 @@ from .device import (
     GetBatteryLevelAction,
     GetDeviceDetailsAction,
     GetIPAddressAction,
+    LockScreenAction,
+    LogOutAction,
+    RestartAction,
     SetAirplaneModeAction,
+    SetAppearanceAction,
     SetBluetoothAction,
     SetBrightnessAction,
     SetDoNotDisturbAction,
     SetLowPowerModeAction,
     SetMobileDataAction,
+    SetNightShiftAction,
+    SetSoundOutputAction,
+    SetStageManagerAction,
     SetTorchAction,
     SetVolumeAction,
     SetWiFiAction,
+    ShutDownAction,
+    SleepAction,
+)
+from .documents import (
+    CreatePDFAction,
+    GetFileAction,
+    MakeHTMLFromRichTextAction,
+    MakeMarkdownFromRichTextAction,
+    MakeRichTextFromHTMLAction,
+    MakeRichTextFromMarkdownAction,
+    MarkupAction,
+    PrintAction,
+    TranscribeAudioAction,
 )
 from .dictionary import (
     DictionaryAction,
@@ -39,6 +73,32 @@ from .files import (
     SaveFileAction,
 )
 from .input import AskAction, GetClipboardAction
+from .location import (
+    GetAddressFromInputAction,
+    GetCurrentLocationAction,
+    GetDirectionsAction,
+    GetDistanceAction,
+    GetTravelTimeAction,
+    SearchMapsAction,
+    ShowInMapsAction,
+)
+from .math import (
+    CalculateAction,
+    CalculateStatisticsAction,
+    MeasurementAction,
+    RandomNumberAction,
+    RoundNumberAction,
+)
+from .media import (
+    AddToPlaylistAction,
+    GetCurrentSongAction,
+    GetPlaybackDestinationAction,
+    PauseMusicAction,
+    PlayMusicAction,
+    SetPlaybackDestinationAction,
+    SkipBackAction,
+    SkipForwardAction,
+)
 from .menu import MenuEndAction, MenuItemAction, MenuStartAction
 from .messages import SendMessageAction
 from .numbers import NumberAction
@@ -63,26 +123,40 @@ from .scripting import (
     ContinueInShortcutAppAction,
     DelayAction,
     DetectTextAction,
+    GetCurrentWeatherAction,
+    GetItemFromListAction,
     GetMyShortcutsAction,
+    GetNameAction,
+    GetTypeAction,
+    GetWeatherForecastAction,
     HashAction,
+    ListAction,
     NothingAction,
     OpenAppAction,
+    OutputAction,
     RepeatEachEndAction,
     RepeatEachStartAction,
     RepeatEndAction,
     RepeatStartAction,
+    RunJavaScriptAction,
     RunShellScriptAction,
     RunShortcutAction,
     SetItemNameAction,
     ViewContentGraphAction,
     WaitToReturnAction,
 )
+from .sharing import AirDropAction, SendEmailAction, ShareAction
 from .text import (
     ChangeCaseAction,
+    CombineTextAction,
     CommentAction,
+    CorrectSpellingAction,
     DetectLanguageAction,
+    GetMatchGroupAction,
     GetNameOfEmojiAction,
     GetTextFromInputAction,
+    MatchTextAction,
+    ReplaceTextAction,
     ScanQRBarCodeAction,
     ShowDefinitionAction,
     SplitTextAction,
@@ -95,8 +169,11 @@ from .variables import (
 )
 from .web import (
     ExpandURLAction,
+    GetArticleAction,
+    GetRSSFeedAction,
     GetURLAction,
     OpenURLAction,
+    SearchWebAction,
     URLAction,
     URLDecodeAction,
     URLEncodeAction,

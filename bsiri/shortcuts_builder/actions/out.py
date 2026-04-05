@@ -16,6 +16,8 @@ class ShowResultAction(BaseAction):
 
     text = VariablesField('Text')
 
+    default_fields = {'ShowWhenRun': False}
+
 
 class ShowAlertAction(BaseAction):
     '''Show alert'''
@@ -26,6 +28,8 @@ class ShowAlertAction(BaseAction):
     show_cancel_button = BooleanField('WFAlertActionCancelButtonShown', default=True)
     text = VariablesField('WFAlertActionMessage')
     title = VariablesField('WFAlertActionTitle')
+
+    default_fields = {'ShowWhenRun': False}
 
 
 class NotificationAction(BaseAction):

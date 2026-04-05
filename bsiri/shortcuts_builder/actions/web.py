@@ -1,6 +1,6 @@
 from typing import Dict, Union
 
-from .base import BaseAction, BooleanField, DictionaryField, Field
+from .base import BaseAction, BooleanField, DictionaryField, Field, IntegerField
 
 
 class URLAction(BaseAction):
@@ -106,3 +106,31 @@ class OpenURLAction(BaseAction):
 
     itype = 'is.workflow.actions.openurl'
     keyword = 'open_url'
+
+
+class GetArticleAction(BaseAction):
+    '''Get the article from a web page (reader mode)'''
+
+    itype = 'is.workflow.actions.getarticle'
+    keyword = 'get_article'
+
+    uuid = Field('UUID', required=False)
+
+
+class GetRSSFeedAction(BaseAction):
+    '''Get items from an RSS feed'''
+
+    itype = 'is.workflow.actions.rss'
+    keyword = 'get_rss_feed'
+
+    count = IntegerField('WFRSSItemQuantity', required=False)
+    uuid = Field('UUID', required=False)
+
+
+class SearchWebAction(BaseAction):
+    '''Search the web'''
+
+    itype = 'is.workflow.actions.searchweb'
+    keyword = 'search_web'
+
+    query = Field('WFSearchQuery', required=False)

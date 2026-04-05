@@ -184,6 +184,98 @@ class OpenAppAction(BaseAction):
     app = Field('WFAppIdentifier')
 
 
+class GetCurrentWeatherAction(BaseAction):
+    '''Get current weather conditions. Supports custom location via location parameter.
+    Output can be coerced to text via detect_text (gives "77F and Cloudy" etc).'''
+
+    itype = 'is.workflow.actions.weather.currentconditions'
+    keyword = 'get_current_weather'
+
+    uuid = Field('UUID', required=False)
+    location = Field('WFWeatherCustomLocation', required=False)
+
+    def dump(self):
+        result = super().dump()
+        loc = self.data.get('location')
+        if loc and isinstance(loc, dict):
+            # Build the full placemark structure from simple lat/lng/name
+            placemark = loc.get('placemark')
+            if not placemark:
+                name = loc.get('name', loc.get('city', 'Location'))
+                placemark = {
+                    'addressDictionary': {
+                        'Name': name,
+                        'City': loc.get('city', ''),
+                        'State': loc.get('state', ''),
+                        'Country': loc.get('country', ''),
+                        'CountryCode': loc.get('country_code', 'US'),
+                        'FormattedAddressLines': [name],
+                    },
+                    'location': {
+                        'latitude': loc.get('latitude', 0),
+                        'longitude': loc.get('longitude', 0),
+                        'altitude': 0, 'course': -1, 'speed': -1,
+                        'horizontalAccuracy': 0, 'verticalAccuracy': -1,
+                        'timestamp': __import__('datetime').datetime.now(),
+                    },
+                    'region': {
+                        'center': {
+                            'latitude': loc.get('latitude', 0),
+                            'longitude': loc.get('longitude', 0),
+                        },
+                        'radius': 5000.0,
+                        'identifier': f"<+{loc.get('latitude', 0)},{loc.get('longitude', 0)}> radius 5000.00",
+                    },
+                }
+            result['WFWorkflowActionParameters']['WFWeatherCustomLocation'] = {'placemark': placemark}
+        return result
+
+
+class GetWeatherForecastAction(BaseAction):
+    '''Get weather forecast. Supports custom location via location parameter.'''
+
+    itype = 'is.workflow.actions.weather.forecast'
+    keyword = 'get_weather_forecast'
+
+    uuid = Field('UUID', required=False)
+    location = Field('WFWeatherCustomLocation', required=False)
+
+    def dump(self):
+        result = super().dump()
+        loc = self.data.get('location')
+        if loc and isinstance(loc, dict):
+            placemark = loc.get('placemark')
+            if not placemark:
+                name = loc.get('name', loc.get('city', 'Location'))
+                placemark = {
+                    'addressDictionary': {
+                        'Name': name,
+                        'City': loc.get('city', ''),
+                        'State': loc.get('state', ''),
+                        'Country': loc.get('country', ''),
+                        'CountryCode': loc.get('country_code', 'US'),
+                        'FormattedAddressLines': [name],
+                    },
+                    'location': {
+                        'latitude': loc.get('latitude', 0),
+                        'longitude': loc.get('longitude', 0),
+                        'altitude': 0, 'course': -1, 'speed': -1,
+                        'horizontalAccuracy': 0, 'verticalAccuracy': -1,
+                        'timestamp': __import__('datetime').datetime.now(),
+                    },
+                    'region': {
+                        'center': {
+                            'latitude': loc.get('latitude', 0),
+                            'longitude': loc.get('longitude', 0),
+                        },
+                        'radius': 5000.0,
+                        'identifier': f"<+{loc.get('latitude', 0)},{loc.get('longitude', 0)}> radius 5000.00",
+                    },
+                }
+            result['WFWorkflowActionParameters']['WFWeatherCustomLocation'] = {'placemark': placemark}
+        return result
+
+
 class DetectTextAction(BaseAction):
     '''Extract text from the previous action's output (coerces any type to string).'''
 
@@ -210,3 +302,59 @@ class RunShellScriptAction(BaseAction):
     script = Field('WFScript')
     shell = Field('WFShell', default='/bin/zsh', required=False)
     input_mode = Field('WFShellScriptInputMode', default='to_stdin', required=False)
+
+
+class GetItemFromListAction(BaseAction):
+    '''Get item from list by index'''
+
+    itype = 'is.workflow.actions.getitemfromlist'
+    keyword = 'get_item_from_list'
+
+    index = IntegerField('WFItemIndex', required=False)
+    uuid = Field('UUID', required=False)
+
+
+class ListAction(BaseAction):
+    '''Create a list'''
+
+    itype = 'is.workflow.actions.list'
+    keyword = 'list'
+
+    items = Field('WFItems', required=False)
+    uuid = Field('UUID', required=False)
+
+
+class GetNameAction(BaseAction):
+    '''Get the name of an item'''
+
+    itype = 'is.workflow.actions.getitemname'
+    keyword = 'get_name'
+
+    uuid = Field('UUID', required=False)
+
+
+class GetTypeAction(BaseAction):
+    '''Get the type of an item'''
+
+    itype = 'is.workflow.actions.getitemtype'
+    keyword = 'get_type'
+
+    uuid = Field('UUID', required=False)
+
+
+class RunJavaScriptAction(BaseAction):
+    '''Run JavaScript on a web page'''
+
+    itype = 'is.workflow.actions.runjavascriptonwebpage'
+    keyword = 'run_javascript'
+
+    script = Field('WFJavaScript')
+
+
+class OutputAction(BaseAction):
+    '''Stop and output (return value from shortcut)'''
+
+    itype = 'is.workflow.actions.output'
+    keyword = 'output'
+
+    uuid = Field('UUID', required=False)
