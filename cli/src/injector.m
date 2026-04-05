@@ -297,35 +297,6 @@ static void AppendOutputFileLine(NSString *line) {
     [handle closeFile];
 }
 
-static NSDictionary *ExtractTailscaleStatus(id obj) {
-    if (!obj) return nil;
-
-    id candidate = obj;
-    if ([candidate isKindOfClass:[NSArray class]] && [(NSArray *)candidate count] == 1) {
-        candidate = [(NSArray *)candidate firstObject];
-    }
-
-    id connected = SafeValueForKey(candidate, @"connected");
-    id profileName = SafeValueForKey(candidate, @"profileName");
-    id useExitNode = SafeValueForKey(candidate, @"useExitNode");
-    id exitNodeName = SafeValueForKey(candidate, @"exitNodeName");
-    id addresses = SafeValueForKey(candidate, @"addresses");
-    id tailscaleIPs = SafeValueForKey(candidate, @"tailscaleIPs");
-
-    if (!connected && !profileName && !useExitNode && !exitNodeName && !addresses && !tailscaleIPs) {
-        return nil;
-    }
-
-    NSMutableDictionary *status = [NSMutableDictionary new];
-    if (connected) status[@"connected"] = connected;
-    if (profileName) status[@"profileName"] = profileName;
-    if (useExitNode) status[@"useExitNode"] = useExitNode;
-    if (exitNodeName) status[@"exitNodeName"] = exitNodeName;
-    if (addresses) status[@"addresses"] = addresses;
-    if (tailscaleIPs) status[@"tailscaleIPs"] = tailscaleIPs;
-    return status;
-}
-
 static void DumpResultObject(NSString *label, id obj) {
     if (!obj) {
         NSLog(@"[BSIRI] %@: (nil)", label);
@@ -335,18 +306,6 @@ static void DumpResultObject(NSString *label, id obj) {
 
     NSLog(@"[BSIRI] %@ class=%@", label, NSStringFromClass([obj class]));
     AppendOutputFileLine([NSString stringWithFormat:@"%@ class=%@", label, NSStringFromClass([obj class])]);
-
-    NSDictionary *tailscale = ExtractTailscaleStatus(obj);
-    if (tailscale) {
-        NSString *statusJSON = JSONStringIfPossible(tailscale);
-        if (statusJSON.length > 0) {
-            NSLog(@"[BSIRI] %@ tailscale-status-json:\n%@", label, statusJSON);
-            AppendOutputFileLine([NSString stringWithFormat:@"%@ tailscale-status-json=%@", label, statusJSON]);
-        } else {
-            NSLog(@"[BSIRI] %@ tailscale-status=%@", label, tailscale);
-            AppendOutputFileLine([NSString stringWithFormat:@"%@ tailscale-status=%@", label, tailscale]);
-        }
-    }
 
     NSString *json = JSONStringIfPossible(obj);
     if (json.length > 0) {
@@ -471,13 +430,6 @@ static unsigned long long OutputBehaviorFromEnv(void) {
 
     unsigned long long value = strtoull(raw, NULL, 10);
     return value;
-}
-
-static NSString *CanonicalBundleID(NSString *bundleID) {
-    if ([bundleID isEqualToString:@"com.tailscale.ipn.macos"]) {
-        return @"io.tailscale.ipn.macsys";
-    }
-    return bundleID;
 }
 
 static BOOL WaitForCapture(WFWorkflowRunnerCapture *capture, NSTimeInterval timeoutSeconds) {
@@ -1326,7 +1278,6 @@ static NSData *BuildShortcutPlist(NSDictionary *action) {
 }
 
 static void RunAppIntent(NSString *bundleID, NSString *intentID, NSDictionary *params) {
-    bundleID = CanonicalBundleID(bundleID);
     NSLog(@"[BSIRI] Running App Intent: %@.%@", bundleID, intentID);
     NSString *fqid = [NSString stringWithFormat:@"%@.%@", bundleID, intentID];
     NSTimeInterval timeoutSeconds = TimeoutFromEnv(45.0);

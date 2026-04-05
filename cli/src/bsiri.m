@@ -6,7 +6,6 @@
 #import <Intents/Intents.h>
 #include <dlfcn.h>
 #include <dispatch/dispatch.h>
-#include <arpa/inet.h>
 #import <objc/runtime.h>
 #import <objc/message.h>
 
@@ -725,100 +724,6 @@ static BOOL RunAppIntentAction(NSString *bundleID, NSString *intentIdentifier, N
     return RunAppIntentActions(@[action], timeoutSeconds, outputOut, NULL);
 }
 
-static void CreateNoteWithBody(NSString *title, NSString *body);
-static NSString *PickRandomTailscaleIPv4FromStatusJSON(NSData *jsonData);
-
-static BOOL RunNotesCreateNoteIntent(NSString *title, NSString *body) {
-    NSMutableDictionary *params = [NSMutableDictionary new];
-    if (title) params[@"title"] = title;
-    if (body) params[@"body"] = body;
-    if (RunAppIntentAction(@"com.apple.Notes", @"CreateNoteIntent", @"Create Note", params, 10.0, NULL)) {
-        return YES;
-    }
-    Log(@"Unable to construct Notes CreateNoteIntent action via private APIs; falling back to AppleScript");
-    CreateNoteWithBody(title ?: @"", body ?: @"");
-    return YES;
-}
-
-static BOOL RunTailscaleGetStatusIntent(id *outputOut) {
-    return RunAppIntentAction(@"com.tailscale.ipn.macos", @"GetStatusIntent", @"Get Status", nil, 15.0, outputOut);
-}
-
-static id WFJSONObjectFromAppIntentObject(id obj);
-
-static NSArray<NSString *> *CollectIPv4StringsFromObject(id obj) {
-    NSMutableArray<NSString *> *results = [NSMutableArray new];
-    NSMutableArray *stack = [NSMutableArray array];
-    if (obj) [stack addObject:obj];
-    NSCharacterSet *dotSet = [NSCharacterSet characterSetWithCharactersInString:@"."];
-
-    while (stack.count > 0) {
-        id current = [stack lastObject];
-        [stack removeLastObject];
-        if (!current || current == [NSNull null]) continue;
-        if ([current isKindOfClass:[NSString class]]) {
-            NSString *s = (NSString *)current;
-            if ([s rangeOfCharacterFromSet:dotSet].location != NSNotFound) {
-                struct in_addr addr;
-                if (inet_pton(AF_INET, s.UTF8String, &addr) == 1) {
-                    [results addObject:s];
-                }
-            }
-            continue;
-        }
-        if ([current isKindOfClass:[NSNumber class]]) continue;
-        if ([current isKindOfClass:[NSDictionary class]]) {
-            for (id value in [(NSDictionary *)current allValues]) {
-                if (value) [stack addObject:value];
-            }
-            continue;
-        }
-        if ([current isKindOfClass:[NSArray class]]) {
-            for (id value in (NSArray *)current) {
-                if (value) [stack addObject:value];
-            }
-            continue;
-        }
-        // Try to obtain serialized representation
-        SEL wfSel = NSSelectorFromString(@"wfSerializedRepresentation");
-        if ([current respondsToSelector:wfSel]) {
-            id rep = ((id(*)(id,SEL))objc_msgSend)(current, wfSel);
-            if (rep) { [stack addObject:rep]; continue; }
-        }
-        SEL dictSel = NSSelectorFromString(@"dictionaryRepresentation");
-        if ([current respondsToSelector:dictSel]) {
-            id rep = ((id(*)(id,SEL))objc_msgSend)(current, dictSel);
-            if (rep) { [stack addObject:rep]; continue; }
-        }
-        SEL jsonSel = NSSelectorFromString(@"jsonObject");
-        if ([current respondsToSelector:jsonSel]) {
-            id rep = ((id(*)(id,SEL))objc_msgSend)(current, jsonSel);
-            if (rep) { [stack addObject:rep]; continue; }
-        }
-        SEL valueSel = NSSelectorFromString(@"value");
-        if ([current respondsToSelector:valueSel]) {
-            id rep = ((id(*)(id,SEL))objc_msgSend)(current, valueSel);
-            if (rep) { [stack addObject:rep]; continue; }
-        }
-        SEL itemSel = NSSelectorFromString(@"item");
-        if ([current respondsToSelector:itemSel]) {
-            id rep = ((id(*)(id,SEL))objc_msgSend)(current, itemSel);
-            if (rep) { [stack addObject:rep]; continue; }
-        }
-        SEL allObjectsSel = NSSelectorFromString(@"allObjects");
-        if ([current respondsToSelector:allObjectsSel]) {
-            id rep = ((id(*)(id,SEL))objc_msgSend)(current, allObjectsSel);
-            if (rep) { [stack addObject:rep]; continue; }
-        }
-        SEL contentSel = NSSelectorFromString(@"content");
-        if ([current respondsToSelector:contentSel]) {
-            id rep = ((id(*)(id,SEL))objc_msgSend)(current, contentSel);
-            if (rep) { [stack addObject:rep]; continue; }
-        }
-    }
-    return results;
-}
-
 static id WFJSONObjectFromAppIntentObject(id obj) {
     if (!obj || obj == [NSNull null]) return nil;
     if ([obj isKindOfClass:[NSDictionary class]] ||
@@ -879,82 +784,6 @@ static id WFJSONObjectFromAppIntentObject(id obj) {
         return arr;
     }
     return nil;
-}
-
-static NSString *PickIPv4FromAppIntentOutput(id output) {
-    id jsonObj = WFJSONObjectFromAppIntentObject(output);
-    if (jsonObj) {
-        if ([NSJSONSerialization isValidJSONObject:jsonObj]) {
-            NSError *err = nil;
-            NSData *data = [NSJSONSerialization dataWithJSONObject:jsonObj options:0 error:&err];
-            if (data) {
-                NSString *ip = PickRandomTailscaleIPv4FromStatusJSON(data);
-                if (ip) return ip;
-            }
-        }
-        NSArray<NSString *> *ips = CollectIPv4StringsFromObject(jsonObj);
-        if (ips.count > 0) {
-            return ips[arc4random_uniform((uint32_t)ips.count)];
-        }
-    } else {
-        NSArray<NSString *> *ips = CollectIPv4StringsFromObject(output);
-        if (ips.count > 0) {
-            return ips[arc4random_uniform((uint32_t)ips.count)];
-        }
-    }
-    return nil;
-}
-
-
-// Helpers: run processes and integrate with Notes for native demo
-static NSData *RunCapture(NSArray<NSString *> *argv, int *statusOut) {
-    if (argv.count == 0) return nil;
-    NSTask *task = [[NSTask alloc] init];
-    task.launchPath = @"/usr/bin/env";
-    task.arguments = argv;
-    NSPipe *pipe = [NSPipe pipe];
-    task.standardOutput = pipe;
-    task.standardError = [NSPipe pipe];
-    @try { [task launch]; [task waitUntilExit]; } @catch (NSException *e) {
-        Log(@"Failed to run %@: %@", [argv componentsJoinedByString:@" "], e);
-        return nil;
-    }
-    if (statusOut) *statusOut = task.terminationStatus;
-    return [[pipe fileHandleForReading] readDataToEndOfFile];
-}
-
-static NSString *PickRandomTailscaleIPv4FromStatusJSON(NSData *jsonData) {
-    if (!jsonData) return nil;
-    NSError *err = nil;
-    id obj = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:&err];
-    if (!obj || ![obj isKindOfClass:[NSDictionary class]]) { Log(@"Invalid Tailscale JSON: %@", err); return nil; }
-    NSDictionary *dict = (NSDictionary *)obj;
-    NSMutableArray<NSDictionary *> *devices = [NSMutableArray new];
-    id selfDev = dict[@"Self"];
-    if ([selfDev isKindOfClass:[NSDictionary class]]) [devices addObject:selfDev];
-    id peers = dict[@"Peer"] ?: dict[@"Peers"]; // different versions
-    if ([peers isKindOfClass:[NSDictionary class]]) {
-        [devices addObjectsFromArray:[(NSDictionary *)peers allValues]];
-    } else if ([peers isKindOfClass:[NSArray class]]) {
-        [devices addObjectsFromArray:(NSArray *)peers];
-    }
-    NSMutableArray<NSString *> *ips = [NSMutableArray new];
-    for (NSDictionary *d in devices) {
-        id arr = d[@"TailscaleIPs"] ?: d[@"Addresses"] ?: d[@"TailscaleIP"];
-        if ([arr isKindOfClass:[NSArray class]]) {
-            for (id ip in (NSArray *)arr) {
-                if (![ip isKindOfClass:[NSString class]]) continue;
-                NSString *s = (NSString *)ip;
-                if ([s rangeOfString:@":"].location == NSNotFound) { [ips addObject:s]; }
-            }
-        } else if ([arr isKindOfClass:[NSString class]]) {
-            NSString *s = (NSString *)arr;
-            if ([s rangeOfString:@":"].location == NSNotFound) [ips addObject:s];
-        }
-    }
-    if (ips.count == 0) return nil;
-    u_int32_t idx = arc4random_uniform((u_int32_t)ips.count);
-    return ips[idx];
 }
 
 static void CreateNoteWithBody(NSString *title, NSString *body) {
@@ -1205,15 +1034,11 @@ static void PrintUsage(FILE *f) {
             "Commands:\n"
             "  open-app <AppName>           Open app (default: native engine)\n"
             "  create-note <Title> <Body>   Create a new note in Apple Notes (native)\n"
-            "  wk-create-note-intent <T> <B> Create note via INCreateNoteIntent + WorkflowKit (private engine)\n"
-            "  wk-find-devices-note         Run Tailscale GetStatus via WorkflowKit; append IP to note (experimental)\n"
-            "  tailscale-note               Pick random Tailscale device IP and create a note\n"
-            "  demo-tailscale               Open Tailscale app\n"
-            "  demo-notes                   Open Notes and create a sample note\n"
-            "  wk-list-actions <BundleID>   List App Intent action identifiers (private)\n"
-            "  wk-create-note-private <Title> <Body>  Create note via private WorkflowKit App Intent\n"
+            "  wk-run-appintent <bundle> <intent> [key=value ...]  Run an App Intent via WorkflowKit\n"
             "  wk-run-file <path.shortcut>  Run a .shortcut plist as a single workflow via WorkflowKit\n"
+            "  wk-list-actions <BundleID>   List App Intent action identifiers (private)\n"
             "  ln-run-intent <bundle> <intent> [timeout]  Run App Intent via LNActionExecutor (handles Entity outputs)\n"
+            "  demo-notes                   Open Notes and create a sample note\n"
             "  debug-introspect             List method names for key classes\n");
 }
 
@@ -1230,39 +1055,6 @@ int main(int argc, const char * argv[]) {
             Log(@"Found %lu actions for %@", (unsigned long)ids.count, bundle);
             for (id s in ids) { Log(@"- %@", s); }
             return 0;
-        }
-        if (argc >= 4 && strcmp(argv[1], "wk-create-note-private") == 0) {
-            NSString *title = [NSString stringWithUTF8String:argv[2]];
-            NSString *body  = [NSString stringWithUTF8String:argv[3]];
-            BOOL ok = RunNotesCreateNoteIntent(title, body);
-            return ok ? 0 : 1;
-        }
-        if (argc >= 4 && strcmp(argv[1], "wk-create-note-intent") == 0) {
-            if (!LoadPrivateFrameworks()) return 1;
-            NSString *title = [NSString stringWithUTF8String:argv[2]];
-            NSString *body  = [NSString stringWithUTF8String:argv[3]];
-            Class INSpeakableStringC = NSClassFromString(@"INSpeakableString");
-            Class INTextNoteContentC = NSClassFromString(@"INTextNoteContent");
-            Class INCreateNoteIntentC = NSClassFromString(@"INCreateNoteIntent");
-            if (!INSpeakableStringC || !INTextNoteContentC || !INCreateNoteIntentC) { Log(@"Intents classes not available"); return 1; }
-            id titleSpeak = ((id(*)(id,SEL,id))objc_msgSend)([INSpeakableStringC alloc], NSSelectorFromString(@"initWithSpokenPhrase:"), title);
-            id textContent = ((id(*)(id,SEL,id))objc_msgSend)([INTextNoteContentC alloc], NSSelectorFromString(@"initWithText:"), body);
-            id intent = ((id(*)(id,SEL,id,id,id))objc_msgSend)([INCreateNoteIntentC alloc], NSSelectorFromString(@"initWithTitle:content:groupName:"), titleSpeak, textContent, nil);
-            if (!intent) { Log(@"Failed to construct INCreateNoteIntent"); return 1; }
-            Class INShortcutC = NSClassFromString(@"INShortcut");
-            id shortcut = ((id(*)(id,SEL,id))objc_msgSend)([INShortcutC alloc], NSSelectorFromString(@"initWithIntent:"), intent);
-            if (!shortcut) { Log(@"Failed to build INShortcut"); return 1; }
-            Class WFWorkflow = NSClassFromString(@"WFWorkflow");
-            SEL initWithShortcutSel = NSSelectorFromString(@"initWithShortcut:error:");
-            id wf = nil;
-            if ([WFWorkflow instancesRespondToSelector:initWithShortcutSel]) {
-                wf = ((id(*)(id,SEL,id,id))objc_msgSend)([WFWorkflow alloc], initWithShortcutSel, shortcut, (id)nil);
-            }
-            if (!wf) { Log(@"WFWorkflow initWithShortcut:error: failed"); return 1; }
-            id desc = NewRunDescriptorForWorkflow(wf); if (!desc) return 1;
-            id req  = NewRunRequest(); if (!req) return 1;
-            BOOL ok = RunWorkflow(desc, req, 8.0);
-            return ok?0:1;
         }
         // ln-run-intent: run a single App Intent via LNActionExecutor (handles Entity outputs)
         if (argc >= 4 && strcmp(argv[1], "ln-run-intent") == 0) {
@@ -1347,12 +1139,6 @@ int main(int argc, const char * argv[]) {
                 } else {
                     [actions addObject:Action_CreateNote(title, body)];
                 }
-            } else if ([cmd isEqualToString:@"demo-tailscale"]) {
-                if (useNativeEngine) {
-                    [[NSWorkspace sharedWorkspace] launchApplication:@"Tailscale"];
-                } else {
-                    [actions addObject:Action_OpenViaShell(@"Tailscale")];
-                }
             } else if ([cmd isEqualToString:@"demo-notes"]) {
                 if (useNativeEngine) {
                     [[NSWorkspace sharedWorkspace] launchApplication:@"Notes"];
@@ -1372,70 +1158,6 @@ int main(int argc, const char * argv[]) {
                 NSArray *ids = ((id(*)(id,SEL,id))objc_msgSend)(Shim, NSSelectorFromString(@"listActions:"), bundle);
                 Log(@"Found %lu actions for %@", (unsigned long)ids.count, bundle);
                 for (id s in ids) { Log(@"- %@", s); }
-            } else if ([cmd isEqualToString:@"wk-create-note-private"]) {
-                if (i+1 >= argc) { Log(@"wk-create-note-private requires <Title> <Body>"); return 2; }
-                NSString *title = [NSString stringWithUTF8String:argv[i++]];
-                NSString *body  = [NSString stringWithUTF8String:argv[i++]];
-                BOOL ok = RunNotesCreateNoteIntent(title, body);
-                return ok ? 0 : 1;
-            } else if ([cmd isEqualToString:@"wk-create-note-intent"]) {
-                if (i+1 >= argc) { Log(@"wk-create-note-intent requires <Title> <Body>"); return 2; }
-                NSString *title = [NSString stringWithUTF8String:argv[i++]];
-                NSString *body  = [NSString stringWithUTF8String:argv[i++]];
-                if (!LoadPrivateFrameworks()) return 1;
-                // Build INCreateNoteIntent
-                Class INSpeakableStringC = NSClassFromString(@"INSpeakableString");
-                Class INTextNoteContentC = NSClassFromString(@"INTextNoteContent");
-                Class INCreateNoteIntentC = NSClassFromString(@"INCreateNoteIntent");
-                if (!INSpeakableStringC || !INTextNoteContentC || !INCreateNoteIntentC) { Log(@"Intents classes not available"); return 1; }
-                id titleSpeak = ((id(*)(id,SEL,id))objc_msgSend)(INSpeakableStringC, NSSelectorFromString(@"speakableStringWithSpokenPhrase:"), title);
-                id textContent = ((id(*)(id,SEL,id))objc_msgSend)([INTextNoteContentC alloc], NSSelectorFromString(@"initWithText:"), body);
-                id intent = ((id(*)(id,SEL,id,id,id))objc_msgSend)([INCreateNoteIntentC alloc], NSSelectorFromString(@"initWithTitle:content:groupName:"), titleSpeak, textContent, nil);
-                if (!intent) { Log(@"Failed to construct INCreateNoteIntent"); return 1; }
-                // Wrap in INShortcut
-                Class INShortcutC = NSClassFromString(@"INShortcut");
-                id shortcut = ((id(*)(id,SEL,id))objc_msgSend)([INShortcutC alloc], NSSelectorFromString(@"initWithIntent:"), intent);
-                if (!shortcut) { Log(@"Failed to build INShortcut"); return 1; }
-                // Create WFWorkflow from INShortcut
-                Class WFWorkflow = NSClassFromString(@"WFWorkflow");
-                SEL initWithShortcutSel = NSSelectorFromString(@"initWithShortcut:error:");
-                id wf = nil;
-                if ([WFWorkflow instancesRespondToSelector:initWithShortcutSel]) {
-                    wf = ((id(*)(id,SEL,id,id))objc_msgSend)([WFWorkflow alloc], initWithShortcutSel, shortcut, (id)nil);
-                }
-                if (!wf) { Log(@"WFWorkflow initWithShortcut:error: failed"); return 1; }
-                id desc = NewRunDescriptorForWorkflow(wf); if (!desc) return 1;
-                id req  = NewRunRequest(); if (!req) return 1;
-                BOOL ok = RunWorkflow(desc, req, 8.0);
-                return ok?0:1;
-            } else if ([cmd isEqualToString:@"wk-find-devices-note"]) {
-                id statusOutput = nil;
-                if (!RunTailscaleGetStatusIntent(&statusOutput)) {
-                    Log(@"Failed to execute Tailscale GetStatus App Intent; falling back to tailscale CLI JSON");
-                    int st = 0;
-                    NSData *out = RunCapture(@[@"tailscale", @"status", @"--json"], &st);
-                    if (st != 0 || !out.length) { Log(@"Failed to get tailscale status --json (exit %d)", st); return 1; }
-                    NSString *ip = PickRandomTailscaleIPv4FromStatusJSON(out);
-                    if (!ip) { Log(@"No IPv4 address found in Tailscale status"); return 1; }
-                    NSString *title = @"Random Tailscale device IP";
-                    NSString *body  = [NSString stringWithFormat:@"Random Tailscale device IP: %@", ip];
-                    CreateNoteWithBody(title, body);
-                    return 0;
-                }
-                NSString *ip = PickIPv4FromAppIntentOutput(statusOutput);
-                if (!ip) {
-                    Log(@"Unable to locate IPv4 address in Tailscale intent output (class %@)", statusOutput ? NSStringFromClass([statusOutput class]) : @"nil");
-                    return 1;
-                }
-                NSString *title = @"Random Tailscale device IP";
-                NSString *body  = [NSString stringWithFormat:@"Random Tailscale device IP: %@", ip];
-                if (!RunNotesCreateNoteIntent(title, body)) {
-                    Log(@"Failed to create note via Notes CreateNote App Intent");
-                    return 1;
-                }
-                Log(@"Created note with Tailscale IPv4 %@ via private App Intents workflow", ip);
-                return 0;
-            } else if ([cmd isEqualToString:@"tailscale-note"]) {
             } else if ([cmd isEqualToString:@"wk-run-appintent"]) {
                 if (i+1 >= argc) { Log(@"wk-run-appintent requires <bundleID> <intentIdentifier> [key=value ...]"); return 2; }
                 NSString *bundle = [NSString stringWithUTF8String:argv[i++]];

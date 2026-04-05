@@ -210,37 +210,3 @@ class AppIntentAction(BaseAction):
             "WFWorkflowActionIdentifier": identifier,
             "WFWorkflowActionParameters": params,
         }
-
-
-class TailscaleGetStatusAction(AppIntentAction):
-    """Helper for Tailscale's "Get Status" App Intent."""
-
-    keyword = "tailscale_get_status"
-
-    def __init__(self, data: Optional[Dict] = None) -> None:
-        base = {
-            "bundle_identifier": "io.tailscale.ipn.macsys",
-            "app_intent_identifier": "GetStatusIntent",
-            "action_identifier": "io.tailscale.ipn.macsys.GetStatusIntent",
-            "name": "Tailscale",
-        }
-        if data:
-            base.update(data)
-        super().__init__(base)
-
-
-class NotesCreateNoteAction(AppIntentAction):
-    """Create a new note in Apple Notes with the provided contents."""
-
-    keyword = "notes_create_note"
-
-    def __init__(self, data: Optional[Dict] = None) -> None:
-        base = {
-            "bundle_identifier": "com.apple.Notes",
-            "app_intent_identifier": "CreateNoteLinkAction",
-            "action_identifier": "com.apple.Notes.CreateNoteLinkAction",
-            "name": "Notes",
-        }
-        if data:
-            base.update(data)
-        super().__init__(base)

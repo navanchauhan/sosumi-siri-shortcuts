@@ -475,8 +475,7 @@ def cmd_demo(args: argparse.Namespace) -> int:
     native_cli = get_native_cli_path()
 
     demos = {
-        "notes": ("Create a note in Apple Notes", ["wk-create-note-private", "Hello from bsiri", "This note was created programmatically via WorkflowKit!"]),
-        "tailscale": ("Get Tailscale status and create a note with a random device IP", ["wk-find-devices-note"]),
+        "notes": ("Create a note in Apple Notes", ["create-note", "Hello from bsiri", "This note was created programmatically via bsiri!"]),
         "open-safari": ("Open Safari via native engine", ["open-app", "Safari"]),
     }
 
