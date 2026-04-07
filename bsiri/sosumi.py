@@ -322,42 +322,40 @@ $INTENTS$
 """
 
 
-def generate_toml(prompt: str, api_key: str, intents_summary: str) -> str:
-    """Generate TOML shortcut spec from a natural language prompt."""
-    client = OpenAI(
-        api_key=api_key,
-        base_url=CEREBRAS_BASE_URL,
-    )
+def _make_client(api_key: str) -> OpenAI:
+    return OpenAI(api_key=api_key, base_url=CEREBRAS_BASE_URL)
 
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": SYSTEM_PROMPT.replace("$INTENTS$", intents_summary),
-            },
-            {
-                "role": "user",
-                "content": prompt,
-            },
-        ],
-        temperature=0.3,
-        max_tokens=4096,
-    )
 
-    content = response.choices[0].message.content.strip()
-
-    # Strip markdown fences if present
+def _strip_fences(content: str) -> str:
+    """Strip markdown fences from LLM output."""
     if content.startswith("```"):
         lines = content.split("\n")
-        # Remove first and last fence lines
         if lines[0].startswith("```"):
             lines = lines[1:]
         if lines and lines[-1].strip() == "```":
             lines = lines[:-1]
         content = "\n".join(lines)
-
     return content
+
+
+def generate_toml(prompt: str, api_key: str, intents_summary: str) -> str:
+    """Generate TOML shortcut spec from a natural language prompt."""
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT.replace("$INTENTS$", intents_summary)},
+        {"role": "user", "content": prompt},
+    ]
+    response = _make_client(api_key).chat.completions.create(
+        model=MODEL, messages=messages, temperature=0.3, max_tokens=4096,
+    )
+    return _strip_fences(response.choices[0].message.content.strip())
+
+
+def generate_toml_with_history(messages: List[Dict], api_key: str) -> str:
+    """Generate TOML from a full message history (for REPL mode)."""
+    response = _make_client(api_key).chat.completions.create(
+        model=MODEL, messages=messages, temperature=0.3, max_tokens=4096,
+    )
+    return _strip_fences(response.choices[0].message.content.strip())
 
 
 def main(argv=None):
@@ -374,6 +372,7 @@ def main(argv=None):
     parser.add_argument("--cache", action="store_true", help="Cache discovered intents to disk (skips ~2s scan on repeat runs)")
     parser.add_argument("--refresh-cache", action="store_true", help="Force refresh the intent cache")
     parser.add_argument("--cache-ttl", type=int, default=DEFAULT_CACHE_TTL, help=f"Cache TTL in seconds (default: {DEFAULT_CACHE_TTL})")
+    parser.add_argument("--repl", action="store_true", help="Interactive mode: generate, execute, then prompt again with full context")
 
     args = parser.parse_args(argv)
 
@@ -400,7 +399,13 @@ def main(argv=None):
         print("Scanning available App Intents...", file=sys.stderr)
         intents_summary = _discover_intents_summary()
 
-    # Generate TOML
+    # Build the system message
+    system_content = SYSTEM_PROMPT.replace("$INTENTS$", intents_summary)
+
+    if args.repl:
+        return _run_repl(args, system_content)
+
+    # Single-shot mode
     print(f"Generating shortcut for: {args.prompt}", file=sys.stderr)
     toml_text = generate_toml(args.prompt, args.api_key, intents_summary)
 
@@ -415,15 +420,23 @@ def main(argv=None):
     if args.dry_run:
         return 0
 
-    # Write to temp file and execute
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False, prefix="sosumi_") as f:
-        f.write(toml_text)
-        toml_path = f.name
+    exit_code, output = _build_and_execute(toml_text, args.timeout)
+    if output:
+        print(output)
+    return exit_code
 
+
+def _build_and_execute(toml_text: str, timeout: float = 45.0):
+    """Build and execute a TOML shortcut spec. Returns (exit_code, output)."""
+    toml_path = None
+    shortcut_path = None
     try:
         from .shortcuts_builder.shortcut import Shortcut
 
-        # Build
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".toml", delete=False, prefix="sosumi_") as f:
+            f.write(toml_text)
+            toml_path = f.name
+
         print("Building shortcut...", file=sys.stderr)
         with open(toml_path, "rb") as f:
             shortcut = Shortcut.load(f, file_format="toml")
@@ -432,32 +445,86 @@ def main(argv=None):
             shortcut.dump(f, file_format="shortcut")
             shortcut_path = f.name
 
-        # Execute
         injector = _get_injector_path()
         if not injector:
             print("Error: bsiri_injector.dylib not found. Build with 'make' in cli/", file=sys.stderr)
-            return 1
+            return 1, None
 
-        exit_code, output = _run_shortcut_file_native(shortcut_path, timeout=args.timeout)
-        if output:
-            print(output)
-        return exit_code
+        return _run_shortcut_file_native(shortcut_path, timeout=timeout)
 
     except Exception as e:
         print(f"\nError: {e}", file=sys.stderr)
-        # Always show the TOML on error so user can debug
         print("\nGenerated TOML:", file=sys.stderr)
         print(toml_text, file=sys.stderr)
-        return 1
+        return 1, None
     finally:
+        for p in (toml_path, shortcut_path):
+            if p:
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
+
+
+def _run_repl(args, system_content: str) -> int:
+    """Interactive REPL: generate → execute → show result → prompt again."""
+    messages = [{"role": "system", "content": system_content}]
+
+    # Start with the initial prompt
+    prompt = args.prompt
+    print(f"\n{'='*60}", file=sys.stderr)
+    print("sosumi REPL — type your requests, Ctrl-C to exit", file=sys.stderr)
+    print(f"{'='*60}\n", file=sys.stderr)
+
+    while True:
+        print(f"Generating shortcut for: {prompt}", file=sys.stderr)
+        messages.append({"role": "user", "content": prompt})
+
+        # Generate
+        toml_text = generate_toml_with_history(messages, args.api_key)
+        messages.append({"role": "assistant", "content": toml_text})
+
+        if args.show_toml:
+            print(f"\n--- Generated TOML ---\n{toml_text}\n--- End TOML ---\n")
+
+        if args.dry_run:
+            result_summary = "(dry run — not executed)"
+        else:
+            # Execute
+            exit_code, output = _build_and_execute(toml_text, args.timeout)
+            if exit_code == 0:
+                result_summary = f"Executed successfully."
+                if output:
+                    result_summary += f"\nOutput:\n{output}"
+                    print(output)
+            else:
+                result_summary = f"Execution failed (exit code {exit_code})."
+                if output:
+                    result_summary += f"\nOutput:\n{output}"
+
+        # Feed the result back into the conversation
+        messages.append({
+            "role": "user",
+            "content": f"[EXECUTION RESULT]: {result_summary}\n\nWhat would you like to do next? (You can refine the previous shortcut, create a new one, or chain additional actions.)",
+        })
+
+        print(f"\n{result_summary}", file=sys.stderr)
+
+        # Prompt for next input
         try:
-            os.unlink(toml_path)
-        except OSError:
-            pass
-        try:
-            os.unlink(shortcut_path)
-        except OSError:
-            pass
+            print(file=sys.stderr)
+            prompt = input("sosumi> ").strip()
+            if not prompt:
+                continue
+            # Pop the auto-generated "what next" message — replace with actual user input
+            messages.pop()
+            messages.append({
+                "role": "user",
+                "content": f"[Previous execution result: {result_summary}]\n\nNew request: {prompt}",
+            })
+        except (KeyboardInterrupt, EOFError):
+            print("\nBye!", file=sys.stderr)
+            return 0
 
 
 if __name__ == "__main__":

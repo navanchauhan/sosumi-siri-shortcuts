@@ -1567,6 +1567,74 @@ static void RunAppIntent(NSString *bundleID, NSString *intentID, NSDictionary *p
     }
 }
 
+static void RunEntityQuery(void) {
+    const char *rawSearch = getenv("BSIRI_ENTITY_SEARCH");
+    const char *rawMangled = getenv("BSIRI_ENTITY_MANGLED_TYPE");
+    const char *rawBundleID = getenv("BSIRI_ENTITY_BUNDLE_ID");
+    if (!rawSearch || !rawSearch[0] || !rawMangled || !rawMangled[0]) return;
+
+    NSString *searchTerm = [NSString stringWithUTF8String:rawSearch];
+    NSString *mangledType = [NSString stringWithUTF8String:rawMangled];
+    NSString *bundleID = rawBundleID ? [NSString stringWithUTF8String:rawBundleID] : nil;
+    NSTimeInterval timeout = TimeoutFromEnv(10.0);
+
+    NSLog(@"[BSIRI] Entity query: search='%@' type='%@' bundle='%@'", searchTerm, mangledType, bundleID ?: @"(nil)");
+
+    // Load LinkServices
+    [[NSBundle bundleWithPath:@"/System/Library/PrivateFrameworks/LinkServices.framework"] loadAndReturnError:nil];
+
+    // Create query request
+    Class LNQueryRequest = NSClassFromString(@"LNQueryRequest");
+    SEL initStrSel = NSSelectorFromString(@"initWithString:entityMangledTypeName:");
+    id query = ((id(*)(id,SEL,id,id))objc_msgSend)([LNQueryRequest alloc], initStrSel, searchTerm, mangledType);
+    if (!query) { NSLog(@"[BSIRI] Failed to create LNQueryRequest"); exit(1); }
+
+    // Get metadata provider
+    NSLog(@"[BSIRI] Getting metadata provider...");
+    Class providerCls = NSClassFromString(@"WFAppIntentsMetadataProvider");
+    id provider = nil;
+    if (providerCls) {
+        SEL sharedSel = NSSelectorFromString(@"sharedProvider");
+        if ([providerCls respondsToSelector:sharedSel]) {
+            @try {
+                provider = ((id(*)(id,SEL))objc_msgSend)(providerCls, sharedSel);
+            } @catch (NSException *e) {
+                NSLog(@"[BSIRI] Provider exception: %@", e);
+            }
+        }
+    }
+    NSLog(@"[BSIRI] Provider: %@", provider ?: @"nil");
+
+    // Try to perform query through the provider or its internal connection manager
+    // Dump provider methods to find query-related ones
+    NSLog(@"[BSIRI] Provider methods with 'query' or 'entity' or 'connection':");
+    unsigned int mc = 0;
+    Method *ml = class_copyMethodList([provider class], &mc);
+    for (unsigned int j = 0; j < mc; j++) {
+        const char *sel = sel_getName(method_getName(ml[j]));
+        if (strstr(sel, "uery") || strstr(sel, "ntit") || strstr(sel, "onnect") || strstr(sel, "earch"))
+            NSLog(@"  - %s", sel);
+    }
+    if (ml) free(ml);
+
+    // Try performQuery directly on the provider
+    SEL performQuerySel = NSSelectorFromString(@"performQuery:forBundleIdentifier:completionHandler:");
+    if ([provider respondsToSelector:performQuerySel]) {
+        NSLog(@"[BSIRI] Using provider.performQuery:forBundleIdentifier:");
+    }
+
+    // Try entity resolution through a different path
+    // Check if there's a resolveEntity or fetchOptions method
+    SEL fetchOptsSel = NSSelectorFromString(@"fetchOptionsForAction:actionMetadata:parameterMetadata:searchTerm:localeIdentifier:completionHandler:");
+
+    // LNConnection crashes consistently when created manually.
+    // Entity queries need a different approach — possibly through WFPerformQueryDialogRequest
+    // or by building a shortcut that uses the entity parameter picker.
+    NSLog(@"[BSIRI] Entity query not yet supported — LNConnection cannot be created in this context");
+    printf("[]\n");
+    exit(1);
+}
+
 static void RunWorkflowFromPlistFile(void) {
     const char *plistPath = getenv("BSIRI_WORKFLOW_PLIST");
     if (!plistPath || !plistPath[0]) return;
@@ -1628,6 +1696,12 @@ static void RunWorkflowFromPlistFile(void) {
 __attribute__((constructor))
 void bsiri_injector_init(void) {
     @autoreleasepool {
+        // Fast path: entity query
+        if (getenv("BSIRI_ENTITY_SEARCH") && getenv("BSIRI_ENTITY_SEARCH")[0]) {
+            RunEntityQuery();
+            return;  // exit called inside
+        }
+
         // Fast path: run a complete plist workflow directly
         const char *plistPath = getenv("BSIRI_WORKFLOW_PLIST");
         if (plistPath && plistPath[0]) {

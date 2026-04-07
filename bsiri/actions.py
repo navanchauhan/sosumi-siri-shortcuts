@@ -36,6 +36,11 @@ DEFAULT_SEARCH_DIRS = [
     os.path.expanduser("~/Applications"),
 ]
 
+# Additional directories that contain App Intents in .appex extensions
+EXTENSION_SEARCH_DIRS = [
+    "/System/Library/ExtensionKit/Extensions",
+]
+
 
 def _find_apps(search_dirs: Iterable[str]) -> Iterator[str]:
     for base in search_dirs:
@@ -46,9 +51,25 @@ def _find_apps(search_dirs: Iterable[str]) -> Iterator[str]:
             yield from (os.path.join(root, d) for d in dirs if d.endswith(".app"))
 
 
+def _find_extensions(search_dirs: Iterable[str] = EXTENSION_SEARCH_DIRS) -> Iterator[str]:
+    """Find .appex extension bundles that may contain App Intents."""
+    for base in search_dirs:
+        if not os.path.isdir(base):
+            continue
+        for entry in os.listdir(base):
+            if entry.endswith(".appex"):
+                yield os.path.join(base, entry)
+
+
 def _bundle_info(app_path: str) -> Tuple[str, Optional[str]]:
     info_plist = os.path.join(app_path, "Contents", "Info.plist")
-    app_name = os.path.basename(app_path).rsplit(".app", 1)[0]
+    basename = os.path.basename(app_path)
+    # Strip .app or .appex suffix for default name
+    for suffix in (".app", ".appex"):
+        if basename.endswith(suffix):
+            basename = basename[: -len(suffix)]
+            break
+    app_name = basename
     bundle_id = None
     try:
         with open(info_plist, "rb") as f:
@@ -240,6 +261,52 @@ def list_all_actions(
                         parameters=params,
                     )
                 )
+
+    # Also scan ExtensionKit .appex bundles (Apple Intelligence, etc.)
+    for ext in _find_extensions():
+        app_name, bundle_id = _bundle_info(ext)
+        for js in _list_actionsdata_files(ext):
+            intents = _parse_actionsdata(js)
+            for intent in intents:
+                params_list: List[ActionParam] = []
+                for p in intent.get("parameters", []) or []:
+                    ptype = None
+                    vt = p.get("valueType") or {}
+                    if isinstance(vt, dict):
+                        if "entity" in vt:
+                            ent = vt["entity"]
+                            if isinstance(ent, dict):
+                                wrapper = ent.get("wrapper") or {}
+                                ptype = wrapper.get("typeName") or "Entity"
+                        elif "scalar" in vt:
+                            ptype = vt["scalar"].get("type")
+                        elif "string" in vt:
+                            ptype = "String"
+                    params_list.append(
+                        ActionParam(
+                            name=p.get("name"),
+                            type=ptype,
+                            display_name=(p.get("title") or {}).get("key") if isinstance(p.get("title"), dict) else None,
+                        )
+                    )
+                title_meta = intent.get("title") or {}
+                title = title_meta.get("key") if isinstance(title_meta, dict) else None
+                desc_meta = intent.get("descriptionMetadata") or {}
+                desc_text = desc_meta.get("descriptionText") or {} if isinstance(desc_meta, dict) else {}
+                description = desc_text.get("key") if isinstance(desc_text, dict) else None
+                actions.append(
+                    ActionInfo(
+                        app_name=app_name,
+                        bundle_id=bundle_id,
+                        app_path=ext,
+                        source_path=js,
+                        identifier=intent.get("identifier"),
+                        title=title,
+                        description=description,
+                        parameters=params_list,
+                    )
+                )
+
     return actions
 
 
